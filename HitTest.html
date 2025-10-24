@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <title>AR Herrenhäuser Gärten</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <title>AR Hit Test — Herrenhäuser Gärten</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; }
-    canvas { display: block; }
-    #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; }
+    html,body{height:100%;margin:0;background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
+    #info {position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:2;background:rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;font-weight:600}
+    .overlay {position:absolute;right:14px;top:14px;z-index:2}
+    button {appearance:none;border:0;background:#0d6efd;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+    canvas {display:block;width:100%;height:100%}
   </style>
 </head>
 <body>
-  <div id="info">Tippe auf eine Fläche, um einen Würfel zu platzieren</div>
+  <div id="info">Tippe auf den Bildschirm, um ein Objekt zu platzieren. Warte, bis der Ring (Reticle) sichtbar wird.</div>
+  <div class="overlay"><button id="exitBtn">Beenden</button></div>
+
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
     import { ARButton } from 'https://unpkg.com/three@0.128.0/examples/jsm/webxr/ARButton.js';
@@ -27,40 +31,63 @@
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera();
+
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      document.body.appendChild(ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test']
-      }));
+      // AR Start Button (Three.js ARButton erzeugt Start-UI)
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
-      reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x0077ff })
-      );
+      // Reticle (Ring) für Hit-Test-Markierung
+      const geometry = new THREE.RingGeometry(0.08, 0.12, 32).rotateX(-Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ color: 0x0077ff });
+      reticle = new THREE.Mesh(geometry, material);
       reticle.matrixAutoUpdate = false;
       reticle.visible = false;
       scene.add(reticle);
 
+      // Controller: platziert Objekt beim "select" (Tap)
       controller = renderer.xr.getController(0);
-      controller.addEventListener('select', () => {
-        if (reticle.visible) {
-          const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-          const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.setFromMatrixPosition(reticle.matrix);
-          scene.add(mesh);
-        }
-      });
+      controller.addEventListener('select', onSelect);
       scene.add(controller);
+
+      window.addEventListener('resize', onWindowResize);
+
+      // Exit-Button: versucht Session zu beenden, schließt Fenster oder informiert Parent
+      document.getElementById('exitBtn').addEventListener('click', async () => {
+        try {
+          const session = renderer.xr.getSession();
+          if (session) await session.end();
+        } catch (e) { /* ignore */ }
+        try { window.close(); } catch(e) {}
+        try { parent.postMessage('exit-ar', window.location.origin); } catch(e) {}
+      });
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onSelect() {
+      if (!reticle.visible) return;
+
+      const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      const material = new THREE.MeshPhongMaterial({ color: 0x44ff44 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.setFromMatrixPosition(reticle.matrix);
+      mesh.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(mesh);
     }
 
     function animate() {
@@ -69,25 +96,27 @@
 
     function render(timestamp, frame) {
       if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
+        const referenceSpace = renderer.xr.getReferenceSpace ? renderer.xr.getReferenceSpace() : null;
 
-        if (!hitTestSourceRequested) {
+        if (session && !hitTestSourceRequested) {
+          // request hit-test source once per session
           session.requestReferenceSpace('viewer').then((viewerSpace) => {
             session.requestHitTestSource({ space: viewerSpace }).then((source) => {
               hitTestSource = source;
             });
-          });
+          }).catch(() => { /* viewer ref or hit test not available */ });
 
           session.addEventListener('end', () => {
             hitTestSourceRequested = false;
             hitTestSource = null;
+            reticle.visible = false;
           });
 
           hitTestSourceRequested = true;
         }
 
-        if (hitTestSource) {
+        if (hitTestSource && referenceSpace) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];

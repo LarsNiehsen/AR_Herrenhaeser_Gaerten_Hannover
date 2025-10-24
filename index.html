@@ -18,11 +18,8 @@
     .intro p{margin:0 0 10px 0;color:#444;line-height:1.45;}
     .cam-header{display:flex;justify-content:center;align-items:center;gap:12px;}
     .cam-header h2{margin:0;color:var(--accent);font-size:16px;text-align:center;}
-    #viewWindow{width:100%;height:56vw;max-height:68vh;min-height:300px;background:#000;border-radius:10px;overflow:hidden;position:relative;}
+    #viewWindow{width:100%;height:56vw;max-height:68vh;min-height:300px;background:#000;border-radius:10px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#fff;}
     @media (max-width:900px){#viewWindow{height:55vh;}}
-    #videoElement{position:absolute;width:100%;height:100%;object-fit:cover;top:0;left:0;z-index:0;background:#000;}
-    #webgl-output{position:absolute;width:100%;height:100%;top:0;left:0;z-index:1;pointer-events:auto;}
-    #infoBox{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.96);color:#111;padding:8px 12px;border-radius:8px;display:none;z-index:6;font-weight:600;font-size:14px;cursor:pointer;}
     .controls-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;}
     button{cursor:pointer;border:0;padding:8px 12px;border-radius:8px;font-weight:600;}
     .btn-primary{background:var(--btn-blue);color:#fff;}
@@ -35,42 +32,6 @@
     #locateBtn{background:var(--btn-blue);color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:600;}
     footer{margin-top:18px;text-align:center;color:#666;font-size:13px;}
     .muted{color:#666;font-size:13px;}
-    .user-arrow { transform-origin:center; }
-
-    /* AR iframe overlay */
-    #arOverlay {
-      position:fixed;
-      inset:0;
-      display:none;
-      z-index:9999;
-      background:rgba(0,0,0,0.9);
-      align-items:flex-start;
-      justify-content:center;
-      padding:8px;
-    }
-    #arIframe {
-      width:100%;
-      height:100%;
-      border:0;
-      border-radius:0;
-      background:#000;
-    }
-    #arCloseBtn {
-      position: absolute;
-      right: 14px;
-      top: 14px;
-      z-index:10000;
-      background:rgba(255,255,255,0.95);
-      color:#0d4771;
-      border-radius:8px;
-      padding:10px 12px;
-      font-weight:700;
-      box-shadow:0 6px 14px rgba(0,0,0,0.25);
-      cursor:pointer;
-    }
-
-    /* Smooth hide animation */
-    .hidden-ui { display:none !important; }
   </style>
 </head>
 <body>
@@ -83,7 +44,7 @@
     <div class="card intro" id="introCard">
       <strong>Kurzinfo</strong>
       <p>
-        Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das Kamerafenster Würfel‑Stationen in ihrer Umgebung platzieren, zu jedem gesetzten Punkt weiterführende Informationen abrufen und so historische Hintergründe, besondere Pflanzen und gestalterische Details der Anlage kompakt erleben.
+        Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das AR‑Erlebnis Würfel‑Stationen in ihrer Umgebung platzieren, zu jedem gesetzten Punkt weiterführende Informationen abrufen und so historische Hintergründe, besondere Pflanzen und gestalterische Details der Anlage kompakt erleben.
       </p>
       <p>
         Die Anwendung kombiniert visuelle Modelle, erklärende Texte und Links und ergänzt damit die reale Besichtigung durch zusätzliche Kontextinformationen zu Brunnen, Beeten und Gartenarchitektur.
@@ -95,25 +56,25 @@
         <h2>Experience Herrenhausen Gardens in Hanover virtually!</h2>
       </div>
 
+      <!-- Keine Kameravorschau; nur Platzhalter und synchroner Start -->
       <div id="viewWindow">
-        <video id="videoElement" autoplay playsinline muted></video>
-        <div id="webgl-output"></div>
-        <div id="infoBox">Mehr Informationen zu dieser Station</div>
+        <div style="text-align:center;padding:18px;">
+          <div style="font-weight:700;font-size:18px;margin-bottom:6px;">AR startet in neuem Tab</div>
+          <div style="opacity:0.9;margin-bottom:12px;">Tippe auf <strong>Start AR</strong>, um das WebXR Hit‑Test Erlebnis zu öffnen.</div>
+          <div style="font-size:13px;color:#e6f0ff;">Hinweis: WebXR/Hit‑Test läuft nur auf unterstützten Geräten/Browsers über HTTPS.</div>
+        </div>
       </div>
 
       <div class="controls-row" style="margin-top:12px;" id="controlsRow">
-        <div style="margin-right:auto;color:#666;">Tippe auf "Start AR" für echtes Platzieren; Vorschau erlaubt erstes Testen.</div>
-        <button id="placePreviewBtn" class="btn-secondary">Platzieren (Vorschau)</button>
-        <button id="togglePreviewBtn" class="btn-secondary">Vorschau umschalten</button>
+        <div style="margin-right:auto;color:#666;">Nur Start AR nötig; Vorschau entfällt.</div>
         <button id="startARBtn" class="btn-primary">Start AR</button>
-        <button id="undoBtn" class="btn-secondary" style="display:none">Undo</button>
       </div>
     </div>
 
     <section class="card stations" id="stationsCard">
       <h3>Stationen des virtuellen Rundgangs</h3>
       <p class="stations-text">
-        Die Karte unten zeigt Ihre aktuelle Position sowie die Stationen des virtuellen Rundgangs zur Orientierung in den Herrenhäuser Gärten. Tippen Sie im Kamerafenster, um in der Vorschau Würfel zu setzen, oder starten Sie AR für Platzierungen in der realen Umgebung.
+        Die Karte unten zeigt Ihre aktuelle Position sowie die Stationen des virtuellen Rundgangs zur Orientierung in den Herrenhäuser Gärten. Tippe auf "Meine Position", um die Karte zu zentrieren.
       </p>
 
       <div id="mapStations"></div>
@@ -123,144 +84,33 @@
       </div>
     </section>
 
-    <footer id="mainFooter">© Lars Niehsen - not for private or commercial use allowed! </footer>
+    <footer id="mainFooter">© Lars Niehsen - not for private or commercial use allowed!</footer>
   </main>
 
-  <!-- AR overlay (iframe) -->
-  <div id="arOverlay">
-    <button id="arCloseBtn" title="AR beenden">Beenden</button>
-    <iframe id="arIframe" src="" allow="camera; fullscreen; xr-spatial-tracking"></iframe>
-  </div>
-
-  <script>
-    // Replace previous tab-opening behavior: load HitTest.html into iframe and hide UI.
-    (function() {
-      const startBtn = document.getElementById('startARBtn');
-      const arOverlay = document.getElementById('arOverlay');
-      const arIframe = document.getElementById('arIframe');
-      const closeBtn = document.getElementById('arCloseBtn');
-
-      const uiToHide = [
-        document.getElementById('mainHeader'),
-        document.getElementById('introCard'),
-        document.getElementById('cameraCard'),
-        document.getElementById('stationsCard'),
-        document.getElementById('mainFooter'),
-        document.getElementById('controlsRow')
-      ];
-
-      function hideUI() {
-        uiToHide.forEach(el => { if (el) el.classList.add('hidden-ui'); });
-      }
-      function showUI() {
-        uiToHide.forEach(el => { if (el) el.classList.remove('hidden-ui'); });
-      }
-
-      startBtn.addEventListener('click', (ev) => {
-        // open overlay immediately — this is a synchronous user action
-        hideUI();
-        arOverlay.style.display = 'flex';
-
-        // load AR page inside iframe (path relative to index.html)
-        // Ensure HitTest.html is reachable and served over HTTPS
-        arIframe.src = 'HitTest.html';
-
-        // Optional: focus iframe to bring it visually forward on some devices
-        arIframe.focus();
-      });
-
-      // Close AR and restore UI
-      closeBtn.addEventListener('click', () => {
-        // attempt to stop any camera / scripts inside iframe by navigating to about:blank
-        try { arIframe.src = 'about:blank'; } catch(e) { /* ignore */ }
-        arOverlay.style.display = 'none';
-        showUI();
-      });
-
-      // If the iframe wants to signal closing, it can postMessage to parent:
-      window.addEventListener('message', (ev) => {
-        // Basic safety: only accept messages from same origin
-        try {
-          if (ev.origin !== window.location.origin) return;
-        } catch(e) { /* origin access may throw on some browsers; ignore */ }
-
-        if (ev.data === 'exit-ar') {
-          closeBtn.click();
-        }
-      });
-    })();
-  </script>
-
-  <!-- lightweight preview placement script (keeps UI behavior, no WebXR here) -->
+  <!-- START AR: neues Tab synchron öffnen und direkt zu HitTest.html navigieren -->
   <script>
     (function () {
-      const view = document.getElementById('viewWindow');
-      const previewBtn = document.getElementById('placePreviewBtn');
-      const toggleBtn = document.getElementById('togglePreviewBtn');
-      const undoBtn = document.getElementById('undoBtn');
-      const infoBox = document.getElementById('infoBox');
+      const startBtn = document.getElementById('startARBtn');
 
-      let previewEnabled = true;
-      let previewMarkers = [];
+      startBtn.addEventListener('click', (ev) => {
+        // Öffne synchron ein neues Tab/Fenster — muss direkt im Klick-Event erfolgen
+        const newWin = window.open('', '_blank');
 
-      toggleBtn.addEventListener('click', () => {
-        previewEnabled = !previewEnabled;
-        toggleBtn.textContent = previewEnabled ? 'Vorschau umschalten' : 'Vorschau umschalten';
-        view.style.filter = previewEnabled ? 'none' : 'grayscale(30%)';
-      });
-
-      previewBtn.addEventListener('click', () => {
-        if (!previewEnabled) return;
-        placePreviewMarker({ x: Math.random() * (view.clientWidth - 80) + 40, y: Math.random() * (view.clientHeight - 80) + 40 });
-      });
-
-      function placePreviewMarker(pos) {
-        const el = document.createElement('div');
-        el.style.position = 'absolute';
-        el.style.width = '48px';
-        el.style.height = '48px';
-        el.style.left = pos.x + 'px';
-        el.style.top = pos.y + 'px';
-        el.style.transform = 'translate(-50%,-50%)';
-        el.style.background = 'rgba(13,110,253,0.9)';
-        el.style.borderRadius = '8px';
-        el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
-        el.style.zIndex = 5;
-        el.style.cursor = 'pointer';
-        el.title = 'Vorschau-Station (Tippe für Info)';
-
-        el.addEventListener('click', (e) => {
-          e.stopPropagation();
-          infoBox.style.display = 'block';
-          infoBox.textContent = 'Vorschau-Station: Weitere Informationen öffnen AR-Ansicht.';
-        });
-
-        document.getElementById('viewWindow').appendChild(el);
-        previewMarkers.push(el);
-        undoBtn.style.display = 'inline-block';
-      }
-
-      undoBtn.addEventListener('click', () => {
-        const last = previewMarkers.pop();
-        if (last && last.parentNode) last.parentNode.removeChild(last);
-        if (previewMarkers.length === 0) undoBtn.style.display = 'none';
-      });
-
-      // Hide infoBox on click anywhere else
-      document.addEventListener('click', (ev) => {
-        if (!ev.target.closest('#viewWindow')) {
-          infoBox.style.display = 'none';
+        if (!newWin) {
+          alert('Das Öffnen des AR-Tabs wurde vom Browser blockiert. Erlaube Popups oder öffne HitTest.html manuell.');
+          return;
         }
+
+        // Sofortige Navigation zur AR-Seite (HitTest.html muss im gleichen Verzeichnis liegen)
+        newWin.location.href = 'HitTest.html';
       });
     })();
   </script>
 
-  <!-- external libs retained for map and potential 3D preview usage -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <!-- Leaflet für Karte -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- minimal map initialization to keep original functionality -->
+  <!-- Karteninitialisierung: Texte, Marker und Nutzerevents wie im Original beibehalten -->
   <script>
     (function () {
       const mapEl = document.getElementById('mapStations');
@@ -273,7 +123,7 @@
           attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // example station markers (replace with your real station data)
+        // Beispielstationen (beibehalten; ersetze durch deine Daten falls gewünscht)
         const stations = [
           { title: 'Großer Garten', coords: [52.3745, 9.7155] },
           { title: 'Berggarten', coords: [52.3751, 9.7172] }
@@ -289,7 +139,7 @@
         });
 
         map.on('locationfound', (e) => {
-          L.circle(e.latlng, { radius: e.accuracy / 2, color: '#0d6efd' }).addTo(map);
+          L.circle(e.latlng, { radius: e.accuracy ? e.accuracy / 2 : 5, color: '#0d6efd' }).addTo(map);
         });
       } catch (err) {
         console.warn('Leaflet init failed', err);
