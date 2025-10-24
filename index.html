@@ -1,3 +1,11 @@
+<!--
+  Copyright (c) 2025 Lars Niehsen. All rights reserved.
+
+  This repository and all files contained herein are protected under full copyright.
+  Any reproduction, distribution, public performance, modification, transmission,
+  or other use in any form is prohibited without the prior express written permission
+  of the copyright holder, for both private and commercial purposes.
+-->
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -18,7 +26,7 @@
     .intro p{margin:0 0 10px 0;color:#444;line-height:1.45;}
     .cam-header{display:flex;justify-content:center;align-items:center;gap:12px;}
     .cam-header h2{margin:0;color:var(--accent);font-size:16px;text-align:center;}
-    #viewWindow{width:100%;height:56vw;max-height:68vh;min-height:300px;background:#000;border-radius:10px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#fff;}
+    #viewWindow{width:100%;height:56vw;max-height:68vh;min-height:200px;background:#0b3a66;border-radius:10px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#fff;}
     @media (max-width:900px){#viewWindow{height:55vh;}}
     .controls-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;}
     button{cursor:pointer;border:0;padding:8px 12px;border-radius:8px;font-weight:600;}
@@ -30,8 +38,10 @@
     #mapStations{width:100%;height:420px;border-radius:8px;overflow:hidden;margin-top:12px;}
     .map-controls{display:flex;gap:8px;align-items:center;margin-top:8px;}
     #locateBtn{background:var(--btn-blue);color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:600;}
-    footer{margin-top:18px;text-align:center;color:#666;font-size:13px;}
+    #orientBtn{background:#ff3b30;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700;}
+    footer{margin-top:18px;text-align:center;color:#666;font-size:13px;line-height:1.4;}
     .muted{color:#666;font-size:13px;}
+    .user-arrow { transform-origin:center; }
   </style>
 </head>
 <body>
@@ -44,24 +54,23 @@
     <div class="card intro" id="introCard">
       <strong>Kurzinfo</strong>
       <p>
-        Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das AR‑Erlebnis Würfel‑Stationen in ihrer Umgebung platzieren, zu jedem gesetzten Punkt weiterführende Informationen abrufen und so historische Hintergründe, besondere Pflanzen und gestalterische Details der Anlage kompakt erleben.
+        Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das AR‑Erlebnis Würfel‑Stationen in ihrer Umgebung platzieren und zusätzliche Informationen abrufen.
       </p>
       <p>
-        Die Anwendung kombiniert visuelle Modelle, erklärende Texte und Links und ergänzt damit die reale Besichtigung durch zusätzliche Kontextinformationen zu Brunnen, Beeten und Gartenarchitektur.
+        Tippe auf "Allow orientation" auf iOS, falls die Blickrichtung nicht automatisch kommt. Die Karte zeigt Stationen und deine Position mit rotem Richtungspfeil an.
       </p>
     </div>
 
     <div class="card" id="cameraCard">
       <div class="cam-header">
-        <h2>Experience Herrenhausen Gardens in Hanover virtually!</h2>
+        <h2>Start AR im neuen Tab</h2>
       </div>
 
-      <!-- Keine Kameravorschau; nur Platzhalter und synchroner Start -->
       <div id="viewWindow">
         <div style="text-align:center;padding:18px;">
           <div style="font-weight:700;font-size:18px;margin-bottom:6px;">AR startet in neuem Tab</div>
-          <div style="opacity:0.9;margin-bottom:12px;">Tippe auf <strong>Start AR</strong>, um das WebXR Hit‑Test Erlebnis zu öffnen.</div>
-          <div style="font-size:13px;color:#e6f0ff;">Hinweis: WebXR/Hit‑Test läuft nur auf unterstützten Geräten/Browsers über HTTPS.</div>
+          <div style="opacity:0.9;margin-bottom:12px;">Tippe auf <strong>Start AR</strong>, um das WebXR Hit‑Test Erlebnis (HitTest.html) in einem separaten Tab zu öffnen.</div>
+          <div style="font-size:13px;color:#e6f0ff;">Hinweis: WebXR/Hit‑Test läuft nur auf unterstützten Geräten/Browsers über HTTPS (z. B. Chrome + ARCore auf Android).</div>
         </div>
       </div>
 
@@ -74,77 +83,182 @@
     <section class="card stations" id="stationsCard">
       <h3>Stationen des virtuellen Rundgangs</h3>
       <p class="stations-text">
-        Die Karte unten zeigt Ihre aktuelle Position sowie die Stationen des virtuellen Rundgangs zur Orientierung in den Herrenhäuser Gärten. Tippe auf "Meine Position", um die Karte zu zentrieren.
+        Die Karte zeigt Ihre aktuelle Position mit rotem Richtungspfeil und die Stationen des Rundgangs. Erlaube Standort- und Sensorzugriff für beste Ergebnisse.
       </p>
 
       <div id="mapStations"></div>
       <div class="map-controls">
         <button id="locateBtn">Meine Position</button>
-        <div style="color:#666;font-size:13px;">Erlaube Standortzugriff, damit deine Position und die Stationen korrekt angezeigt werden.</div>
+        <button id="orientBtn">Allow orientation</button>
+        <div style="color:#666;font-size:13px;">Erlaube Standort- und Sensorzugriff; auf iOS muss Orientation-Permission per Button bestätigt werden.</div>
       </div>
     </section>
 
-    <footer id="mainFooter">© Lars Niehsen - not for private or commercial use allowed!</footer>
+    <footer id="mainFooter">
+      © 2025 Lars Niehsen. All rights reserved.
+      <br>
+      This repository and all files contained herein are protected under full copyright.
+      Any reproduction, distribution, public performance, modification, transmission,
+      or other use in any form is prohibited without the prior express written permission
+      of the copyright holder, for both private and commercial purposes.
+    </footer>
   </main>
 
-  <!-- START AR: neues Tab synchron öffnen und direkt zu HitTest.html navigieren -->
+  <!-- START AR: neues Tab synchron öffnen -->
   <script>
     (function () {
       const startBtn = document.getElementById('startARBtn');
-
       startBtn.addEventListener('click', (ev) => {
-        // Öffne synchron ein neues Tab/Fenster — muss direkt im Klick-Event erfolgen
+        // Must open synchronously on the click event so browser treats it as user-initiated
         const newWin = window.open('', '_blank');
-
         if (!newWin) {
           alert('Das Öffnen des AR-Tabs wurde vom Browser blockiert. Erlaube Popups oder öffne HitTest.html manuell.');
           return;
         }
-
-        // Sofortige Navigation zur AR-Seite (HitTest.html muss im gleichen Verzeichnis liegen)
         newWin.location.href = 'HitTest.html';
       });
     })();
   </script>
 
-  <!-- Leaflet für Karte -->
+  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Karteninitialisierung: Texte, Marker und Nutzerevents wie im Original beibehalten -->
+  <!-- Karten-Initialisierung mit Stationen, rotem Richtungspfeil und Orientation permission helper -->
   <script>
-    (function () {
-      const mapEl = document.getElementById('mapStations');
-      if (!mapEl) return;
+  (function () {
+    const mapEl = document.getElementById('mapStations');
+    if (!mapEl) return;
 
-      try {
-        const map = L.map(mapEl).setView([52.374, 9.716], 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+    let mapStations;
+    let userLayer;
+    let lastPos = null;
+    let heading = 0;
 
-        // Beispielstationen (beibehalten; ersetze durch deine Daten falls gewünscht)
-        const stations = [
-          { title: 'Großer Garten', coords: [52.3745, 9.7155] },
-          { title: 'Berggarten', coords: [52.3751, 9.7172] }
-        ];
+    // Stationen (exakte Koordinaten)
+    const stations = [
+      { title: 'Große Fontaine', coords: [52.385968, 9.695931] },
+      { title: 'Goldenes Tor', coords: [52.390184, 9.699546] },
+      { title: 'Haupteingang mit Kasse', coords: [52.391185, 9.698368] },
+      { title: 'Niki de Saint Phalle - Grotte', coords: [52.390713, 9.696767] },
+      { title: 'Statue', coords: [52.389882, 9.698785] }
+    ];
 
-        stations.forEach(s => {
-          L.marker(s.coords).addTo(map).bindPopup(`<strong>${s.title}</strong>`);
-        });
+    // init map
+    mapStations = L.map(mapEl).setView([52.3895, 9.6975], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapStations);
 
-        // locate button
-        document.getElementById('locateBtn').addEventListener('click', () => {
-          map.locate({ setView: true, maxZoom: 17 });
-        });
+    // add station markers
+    stations.forEach(s => {
+      L.marker(s.coords).addTo(mapStations).bindPopup(`<strong>${s.title}</strong>`);
+    });
 
-        map.on('locationfound', (e) => {
-          L.circle(e.latlng, { radius: e.accuracy ? e.accuracy / 2 : 5, color: '#0d6efd' }).addTo(map);
-        });
-      } catch (err) {
-        console.warn('Leaflet init failed', err);
+    // user layer
+    userLayer = L.layerGroup().addTo(mapStations);
+
+    // locate button
+    const locateBtn = document.getElementById('locateBtn');
+    locateBtn.addEventListener('click', () => {
+      if (lastPos) mapStations.setView([lastPos.latitude, lastPos.longitude], 17);
+      else mapStations.locate({ setView: true, maxZoom: 17 });
+    });
+
+    // orientation permission button (for iOS)
+    const orientBtn = document.getElementById('orientBtn');
+    orientBtn.addEventListener('click', async () => {
+      // iOS 13+ requires explicit permission via DeviceOrientationEvent.requestPermission()
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res === 'granted') {
+            window.addEventListener('deviceorientation', onDeviceOrientation, true);
+            orientBtn.textContent = 'Orientation allowed';
+            orientBtn.disabled = true;
+          } else {
+            alert('Orientation permission denied');
+          }
+        } catch (e) {
+          console.warn('Orientation permission error', e);
+          alert('Orientation permission failed');
+        }
+      } else {
+        // non-iOS: just bind the event
+        window.addEventListener('deviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', onDeviceOrientation, true);
+        orientBtn.textContent = 'Orientation enabled';
+        orientBtn.disabled = true;
       }
-    })();
+    });
+
+    // watch GPS
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(onPos, err => console.warn('Geolocation error', err), {
+        enableHighAccuracy: true,
+        maximumAge: 2000,
+        timeout: 10000
+      });
+    } else {
+      console.warn('Geolocation not available');
+    }
+
+    function onDeviceOrientation(e) {
+      // best-effort conversion: alpha -> compass heading
+      let alpha = e.alpha;
+      if (alpha == null) return;
+      // many devices: heading = 360 - alpha
+      heading = (360 - alpha) % 360;
+      if (lastPos) drawUser(lastPos);
+    }
+
+    function onPos(pos) {
+      lastPos = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy || 5
+      };
+      drawUser(lastPos);
+      if (!mapStations._userCentered) {
+        mapStations.setView([lastPos.latitude, lastPos.longitude], 17);
+        mapStations._userCentered = true;
+      }
+    }
+
+    function drawUser(p) {
+      userLayer.clearLayers();
+
+      // accuracy circle
+      L.circle([p.latitude, p.longitude], {
+        radius: Math.max(p.accuracy, 4),
+        color: 'rgba(255,0,0,0.6)',
+        fillColor: 'rgba(255,0,0,0.12)',
+        weight: 1
+      }).addTo(userLayer);
+
+      // SVG red arrow rotated by heading (arrow points toward heading)
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+          <g transform="translate(24,24) rotate(${heading})">
+            <path d="M0,-16 L6,0 L0,-6 L-6,0 Z" fill="red"/>
+            <circle cx="0" cy="10" r="3" fill="red"/>
+          </g>
+        </svg>
+      `;
+      const url = 'data:image/svg+xml;base64,' + btoa(svg);
+
+      const icon = L.icon({
+        iconUrl: url,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+        className: 'user-arrow'
+      });
+
+      L.marker([p.latitude, p.longitude], { icon: icon, interactive: false }).addTo(userLayer);
+    }
+
+    // expose helper for debugging
+    window._mapStations = mapStations;
+  })();
   </script>
 </body>
 </html>
