@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>AR - Virtueller Rundgang durch die Herrenhäuser Gärten Hannover</title>
+  <title>Herrenhäuser Gärten Hannover - AR</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <style>
     html,body{height:100%;margin:0;background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
@@ -69,9 +69,9 @@
       camera.add(arrow);
       scene.add(camera);
       
-      // Erstelle das Zielobjekt (Große Fontäne)
+      // Erstelle das Zielobjekt (Große Fontäne) und sein neues Label
       targetCube = createTargetCube();
-      targetLabel = createTextSprite("Große Fontäne");
+      targetLabel = createFountainLabel(); // Use the new label function
       scene.add(targetCube);
       scene.add(targetLabel);
       clickableObjects.push(targetCube);
@@ -110,17 +110,15 @@
     }
 
     function onSelect() {
-      // Raycasting für Klick-Erkennung
       raycaster.setFromCamera({ x: 0, y: 0 }, camera);
       const intersects = raycaster.intersectObjects(clickableObjects);
 
       if (intersects.length > 0 && intersects[0].object === targetCube) {
-        // Wenn der Ziel-Würfel geklickt wurde, öffne den Link
+        // Open the link in a new tab when the target cube is clicked.
         window.open('https://de.wikipedia.org/wiki/Gro%C3%9Fe_Font%C3%A4ne_(Herrenhausen)', '_blank');
-        return; // Verhindere das Platzieren eines neuen Würfels
+        return;
       }
       
-      // Wenn nichts Spezielles geklickt wurde, platziere einen normalen Würfel
       if (reticle.visible) {
         const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const material = new THREE.MeshStandardMaterial({
@@ -153,7 +151,6 @@
         arrowGroup.add(head);
         arrowGroup.add(shaft);
         arrowGroup.rotation.x = -Math.PI / 4;
-        // Pfeil verkleinern
         arrowGroup.scale.set(0.2, 0.2, 0.2);
         return arrowGroup;
     }
@@ -162,44 +159,61 @@
         const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
         const material = new THREE.MeshStandardMaterial({ color: 0x0077ff, metalness: 0.3, roughness: 0.6 });
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.visible = false; // Initial unsichtbar
+        mesh.visible = false;
         return mesh;
     }
 
-    function createTextSprite(message) {
+    // New function for the redesigned fountain label
+    function createFountainLabel() {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        const fontSize = 48;
-        context.font = `bold ${fontSize}px Inter, sans-serif`;
-        const textWidth = context.measureText(message).width;
+        const padding = 20;
         
-        canvas.width = textWidth + 24;
-        canvas.height = fontSize + 24;
+        // Define fonts
+        const titleFont = 'bold 40px Inter, sans-serif';
+        const subtitleFont = '28px Inter, sans-serif';
 
-        context.font = `bold ${fontSize}px Inter, sans-serif`;
-        context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        // Get text metrics
+        context.font = titleFont;
+        const titleWidth = context.measureText('Große Fontäne').width;
+        context.font = subtitleFont;
+        const subtitleWidth = context.measureText('Height of water jet: 72 m').width;
+        const textWidth = Math.max(titleWidth, subtitleWidth);
+        
+        canvas.width = textWidth + padding * 2;
+        canvas.height = 40 + 28 + padding * 2 + 10; // Heights + paddings + spacing
+
+        // Draw background
+        context.fillStyle = 'white';
         context.fillRect(0, 0, canvas.width, canvas.height);
         
+        // Draw text
         context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        context.fillStyle = 'white';
-        context.fillText(message, canvas.width / 2, canvas.height / 2);
+        context.fillStyle = 'black';
+
+        // Draw Title
+        context.font = titleFont;
+        context.fillText('Große Fontäne', canvas.width / 2, padding + 40);
+        
+        // Draw Subtitle
+        context.font = subtitleFont;
+        context.fillText('Height of water jet: 72 m', canvas.width / 2, padding + 40 + 10 + 28);
         
         const texture = new THREE.CanvasTexture(canvas);
         const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
         const sprite = new THREE.Sprite(material);
         
         const aspect = canvas.width / canvas.height;
-        sprite.scale.set(0.5 * aspect, 0.5, 1);
-        sprite.visible = false; // Initial unsichtbar
+        sprite.scale.set(0.6 * aspect, 0.6, 1);
+        sprite.visible = false; // Initially invisible
         return sprite;
     }
 
-    // Erstellt Text-Label für Koordinaten (halbe Schriftgröße)
+    // Creates text-label for coordinates (half font size)
     function createCoordinateLabel(positionData) {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        const fontSize = 16; // Halbe Schriftgröße
+        const fontSize = 16;
         const lineHeight = fontSize * 1.2;
         context.font = `bold ${fontSize}px Inter, sans-serif`;
 
@@ -260,8 +274,8 @@
             const mat = new THREE.Matrix4().fromArray(reticle.matrix.elements);
             targetCube.position.setFromMatrixPosition(mat);
             
-            // Textlabel über dem Würfel positionieren
-            targetLabel.position.copy(targetCube.position).add(new THREE.Vector3(0, 0.4, 0));
+            // Position the label higher above the cube
+            targetLabel.position.copy(targetCube.position).add(new THREE.Vector3(0, 0.65, 0));
 
             targetCube.visible = true;
             targetLabel.visible = true;
@@ -300,7 +314,6 @@
         }
       }
       
-      // Versuche, das Zielobjekt zu platzieren, wenn es in Reichweite ist
       placeTargetObjectIfNeeded();
 
       updateInfoAndArrow();
@@ -308,7 +321,6 @@
           arrow.position.y = -0.4 + Math.sin(timestamp / 500) * 0.05;
       }
       
-      // Alle rotierenden Objekte drehen
       rotatingObjects.forEach(obj => { obj.rotation.y += 0.01; });
       
       renderer.render(scene, camera);
