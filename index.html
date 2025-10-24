@@ -36,16 +36,51 @@
     footer{margin-top:18px;text-align:center;color:#666;font-size:13px;}
     .muted{color:#666;font-size:13px;}
     .user-arrow { transform-origin:center; }
+
+    /* AR iframe overlay */
+    #arOverlay {
+      position:fixed;
+      inset:0;
+      display:none;
+      z-index:9999;
+      background:rgba(0,0,0,0.9);
+      align-items:flex-start;
+      justify-content:center;
+      padding:8px;
+    }
+    #arIframe {
+      width:100%;
+      height:100%;
+      border:0;
+      border-radius:0;
+      background:#000;
+    }
+    #arCloseBtn {
+      position: absolute;
+      right: 14px;
+      top: 14px;
+      z-index:10000;
+      background:rgba(255,255,255,0.95);
+      color:#0d4771;
+      border-radius:8px;
+      padding:10px 12px;
+      font-weight:700;
+      box-shadow:0 6px 14px rgba(0,0,0,0.25);
+      cursor:pointer;
+    }
+
+    /* Smooth hide animation */
+    .hidden-ui { display:none !important; }
   </style>
 </head>
 <body>
-  <header>
+  <header id="mainHeader">
     <h1>GartenIS - Virtueller Rundgang Herrenhäuser Gärten</h1>
     <a class="visit-link" href="https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben" target="_blank">Herrenhäuser Gärten Hannover</a>
   </header>
 
-  <main>
-    <div class="card intro">
+  <main id="mainContent">
+    <div class="card intro" id="introCard">
       <strong>Kurzinfo</strong>
       <p>
         Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das Kamerafenster Würfel‑Stationen in ihrer Umgebung platzieren, zu jedem gesetzten Punkt weiterführende Informationen abrufen und so historische Hintergründe, besondere Pflanzen und gestalterische Details der Anlage kompakt erleben.
@@ -55,7 +90,7 @@
       </p>
     </div>
 
-    <div class="card">
+    <div class="card" id="cameraCard">
       <div class="cam-header">
         <h2>Experience Herrenhausen Gardens in Hanover virtually!</h2>
       </div>
@@ -66,7 +101,7 @@
         <div id="infoBox">Mehr Informationen zu dieser Station</div>
       </div>
 
-      <div class="controls-row" style="margin-top:12px;">
+      <div class="controls-row" style="margin-top:12px;" id="controlsRow">
         <div style="margin-right:auto;color:#666;">Tippe auf "Start AR" für echtes Platzieren; Vorschau erlaubt erstes Testen.</div>
         <button id="placePreviewBtn" class="btn-secondary">Platzieren (Vorschau)</button>
         <button id="togglePreviewBtn" class="btn-secondary">Vorschau umschalten</button>
@@ -75,7 +110,7 @@
       </div>
     </div>
 
-    <section class="card stations">
+    <section class="card stations" id="stationsCard">
       <h3>Stationen des virtuellen Rundgangs</h3>
       <p class="stations-text">
         Die Karte unten zeigt Ihre aktuelle Position sowie die Stationen des virtuellen Rundgangs zur Orientierung in den Herrenhäuser Gärten. Tippen Sie im Kamerafenster, um in der Vorschau Würfel zu setzen, oder starten Sie AR für Platzierungen in der realen Umgebung.
@@ -88,17 +123,75 @@
       </div>
     </section>
 
-    <footer>© Lars Niehsen - not for private or commercial use allowed! </footer>
+    <footer id="mainFooter">© Lars Niehsen - not for private or commercial use allowed! </footer>
   </main>
 
-  <!-- Open HitTest.html in a new tab when Start AR is clicked -->
+  <!-- AR overlay (iframe) -->
+  <div id="arOverlay">
+    <button id="arCloseBtn" title="AR beenden">Beenden</button>
+    <iframe id="arIframe" src="" allow="camera; fullscreen; xr-spatial-tracking"></iframe>
+  </div>
+
   <script>
-    document.getElementById("startARBtn").addEventListener("click", () => {
-      window.open("HitTest.html", "_blank");
-    });
+    // Replace previous tab-opening behavior: load HitTest.html into iframe and hide UI.
+    (function() {
+      const startBtn = document.getElementById('startARBtn');
+      const arOverlay = document.getElementById('arOverlay');
+      const arIframe = document.getElementById('arIframe');
+      const closeBtn = document.getElementById('arCloseBtn');
+
+      const uiToHide = [
+        document.getElementById('mainHeader'),
+        document.getElementById('introCard'),
+        document.getElementById('cameraCard'),
+        document.getElementById('stationsCard'),
+        document.getElementById('mainFooter'),
+        document.getElementById('controlsRow')
+      ];
+
+      function hideUI() {
+        uiToHide.forEach(el => { if (el) el.classList.add('hidden-ui'); });
+      }
+      function showUI() {
+        uiToHide.forEach(el => { if (el) el.classList.remove('hidden-ui'); });
+      }
+
+      startBtn.addEventListener('click', (ev) => {
+        // open overlay immediately — this is a synchronous user action
+        hideUI();
+        arOverlay.style.display = 'flex';
+
+        // load AR page inside iframe (path relative to index.html)
+        // Ensure HitTest.html is reachable and served over HTTPS
+        arIframe.src = 'HitTest.html';
+
+        // Optional: focus iframe to bring it visually forward on some devices
+        arIframe.focus();
+      });
+
+      // Close AR and restore UI
+      closeBtn.addEventListener('click', () => {
+        // attempt to stop any camera / scripts inside iframe by navigating to about:blank
+        try { arIframe.src = 'about:blank'; } catch(e) { /* ignore */ }
+        arOverlay.style.display = 'none';
+        showUI();
+      });
+
+      // If the iframe wants to signal closing, it can postMessage to parent:
+      window.addEventListener('message', (ev) => {
+        // Basic safety: only accept messages from same origin
+        try {
+          if (ev.origin !== window.location.origin) return;
+        } catch(e) { /* origin access may throw on some browsers; ignore */ }
+
+        if (ev.data === 'exit-ar') {
+          closeBtn.click();
+        }
+      });
+    })();
   </script>
 
-  <!-- Optional: lightweight preview placement script (keeps UI behavior, no WebXR here) -->
+  <!-- lightweight preview placement script (keeps UI behavior, no WebXR here) -->
   <script>
     (function () {
       const view = document.getElementById('viewWindow');
@@ -136,9 +229,10 @@
         el.style.cursor = 'pointer';
         el.title = 'Vorschau-Station (Tippe für Info)';
 
-        el.addEventListener('click', () => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
           infoBox.style.display = 'block';
-          infoBox.textContent = 'Vorschau-Station: Weitere Informationen öffnen AR-Tab.';
+          infoBox.textContent = 'Vorschau-Station: Weitere Informationen öffnen AR-Ansicht.';
         });
 
         document.getElementById('viewWindow').appendChild(el);
