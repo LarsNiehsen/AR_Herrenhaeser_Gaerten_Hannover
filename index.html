@@ -35,7 +35,6 @@
     #locateBtn{background:var(--btn-blue);color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:600;}
     footer{margin-top:18px;text-align:center;color:#666;font-size:13px;}
     .muted{color:#666;font-size:13px;}
-    /* rotate arrow inside red marker */
     .user-arrow { transform-origin:center; }
   </style>
 </head>
@@ -89,379 +88,119 @@
       </div>
     </section>
 
-    <footer>© Universität Hannover — GartenIS Demo</footer>
+    <footer>© Lars Niehsen - not for private or commercial use allowed! </footer>
   </main>
 
+  <!-- Open HitTest.html in a new tab when Start AR is clicked -->
+  <script>
+    document.getElementById("startARBtn").addEventListener("click", () => {
+      window.open("HitTest.html", "_blank");
+    });
+  </script>
+
+  <!-- Optional: lightweight preview placement script (keeps UI behavior, no WebXR here) -->
+  <script>
+    (function () {
+      const view = document.getElementById('viewWindow');
+      const previewBtn = document.getElementById('placePreviewBtn');
+      const toggleBtn = document.getElementById('togglePreviewBtn');
+      const undoBtn = document.getElementById('undoBtn');
+      const infoBox = document.getElementById('infoBox');
+
+      let previewEnabled = true;
+      let previewMarkers = [];
+
+      toggleBtn.addEventListener('click', () => {
+        previewEnabled = !previewEnabled;
+        toggleBtn.textContent = previewEnabled ? 'Vorschau umschalten' : 'Vorschau umschalten';
+        view.style.filter = previewEnabled ? 'none' : 'grayscale(30%)';
+      });
+
+      previewBtn.addEventListener('click', () => {
+        if (!previewEnabled) return;
+        placePreviewMarker({ x: Math.random() * (view.clientWidth - 80) + 40, y: Math.random() * (view.clientHeight - 80) + 40 });
+      });
+
+      function placePreviewMarker(pos) {
+        const el = document.createElement('div');
+        el.style.position = 'absolute';
+        el.style.width = '48px';
+        el.style.height = '48px';
+        el.style.left = pos.x + 'px';
+        el.style.top = pos.y + 'px';
+        el.style.transform = 'translate(-50%,-50%)';
+        el.style.background = 'rgba(13,110,253,0.9)';
+        el.style.borderRadius = '8px';
+        el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
+        el.style.zIndex = 5;
+        el.style.cursor = 'pointer';
+        el.title = 'Vorschau-Station (Tippe für Info)';
+
+        el.addEventListener('click', () => {
+          infoBox.style.display = 'block';
+          infoBox.textContent = 'Vorschau-Station: Weitere Informationen öffnen AR-Tab.';
+        });
+
+        document.getElementById('viewWindow').appendChild(el);
+        previewMarkers.push(el);
+        undoBtn.style.display = 'inline-block';
+      }
+
+      undoBtn.addEventListener('click', () => {
+        const last = previewMarkers.pop();
+        if (last && last.parentNode) last.parentNode.removeChild(last);
+        if (previewMarkers.length === 0) undoBtn.style.display = 'none';
+      });
+
+      // Hide infoBox on click anywhere else
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#viewWindow')) {
+          infoBox.style.display = 'none';
+        }
+      });
+    })();
+  </script>
+
+  <!-- external libs retained for map and potential 3D preview usage -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- minimal map initialization to keep original functionality -->
   <script>
-    // ----------------------------------------
-    // Globale Variablen
-    // ----------------------------------------
-    let scene, camera, renderer, model, raycaster, mouse, videoEl;
-    let particles, particlePositions = [];
-    let mapStations, userMarkerLayer;
-    let xrSession = null, xrRefSpace = null, hitTestSource = null;
-    let reticle = null, placedObjects = [], stationCount = 0;
-    let userHeading = 0;
+    (function () {
+      const mapEl = document.getElementById('mapStations');
+      if (!mapEl) return;
 
-    // UI
-    const startARBtn = document.getElementById('startARBtn');
-    const undoBtn = document.getElementById('undoBtn');
-    const placePreviewBtn = document.getElementById('placePreviewBtn');
-    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
-    const locateBtn = document.getElementById('locateBtn');
-    const infoBox = document.getElementById('infoBox');
-
-    // ----------------------------------------
-    // Init
-    // ----------------------------------------
-    document.addEventListener('DOMContentLoaded', init);
-
-    function init(){
-      // Three.js Szene & Kamera (Preview)
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, getViewAspect(), 0.01, 1000);
-      camera.position.set(0, 1.6, 2);
-
-      renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      setRendererSizeToView();
-      renderer.xr.enabled = true;
-      document.getElementById('webgl-output').appendChild(renderer.domElement);
-
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      light.position.set(0.5,1,0.25);
-      scene.add(light);
-
-      // Reticle für Hit-Test / Ebenenerkennung (Ring)
-      const ringGeom = new THREE.RingGeometry(0.08, 0.12, 32);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, transparent:true, opacity:0.9 });
-      reticle = new THREE.Mesh(ringGeom, ringMat);
-      reticle.rotation.x = -Math.PI/2;
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
-
-      raycaster = new THREE.Raycaster();
-      mouse = new THREE.Vector2();
-
-      // Kamera-Vorschau starten
-      videoEl = document.getElementById('videoElement');
-      startCameraPreview();
-
-      // Optionales OBJ laden (falls vorhanden)
-      const loader = new THREE.OBJLoader();
-      loader.load('data/Fontaine_3D.obj',
-        function(obj){
-          model = obj;
-          model.scale.set(0.01,0.01,0.01);
-          model.rotation.x = -Math.PI/2;
-          scene.add(model);
-          createParticleSystem();
-        },
-        undefined,
-        function(err){ console.warn('OBJ load error', err); }
-      );
-
-      // Karte initialisieren
-      initMap();
-
-      // Events
-      window.addEventListener('resize', onWindowResize);
-      renderer.domElement.addEventListener('click', onCanvasClick);
-      placePreviewBtn.addEventListener('click', placeInPreview);
-      togglePreviewBtn.addEventListener('click', togglePreview);
-      startARBtn.addEventListener('click', startAR);
-      undoBtn.addEventListener('click', undoLastPlaced);
-      locateBtn.addEventListener('click', centerOnUser);
-
-      // Versuche Heading via DeviceOrientation (falls verfügbar)
-      if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        // iOS 13+ - permission required; we don't auto-request here
-      } else {
-        window.addEventListener('deviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', handleDeviceOrientation, true);
-      }
-
-      animatePreview();
-    }
-
-    // ----------------------------------------
-    // Kamera Preview
-    // ----------------------------------------
-    function startCameraPreview(){
-      if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-          .then(s => { videoEl.srcObject = s; })
-          .catch(e => { console.warn('Camera preview error', e); });
-      }
-    }
-    function togglePreview(){ if(videoEl.paused) videoEl.play().catch(()=>{}); else videoEl.pause(); }
-
-    // ----------------------------------------
-    // Karte (eine Karte unter Kamerabild)
-    // - Benutzerposition als roter Kreis + Richtungspfeil
-    // - Marker "Große Fontäne" auf exakter Koordinate
-    // ----------------------------------------
-    function initMap(){
-      mapStations = L.map('mapStations').setView([52.385944,9.695917],15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-        attribution:'&copy; OpenStreetMap contributors',
-        maxZoom:19
-      }).addTo(mapStations);
-
-      // Marker: Große Fontäne (ursprüngliche Koordinate)
-      const grosseFontaneCoord = [52.3848, 9.6968];
-      L.marker(grosseFontaneCoord).addTo(mapStations).bindPopup("<b>Große Fontäne</b><br>Herrenhäuser Gärten");
-
-      // Initialer leerer Layer für User (we update it)
-      userMarkerLayer = L.layerGroup().addTo(mapStations);
-
-      // Beispiel-Stationen (weitere können ergänzt werden)
-      const stations = [
-        { title: 'Berggarten', coords: [52.3876, 9.6943] },
-        { title: 'Barockgarten', coords: [52.3851, 9.6972] }
-      ];
-      stations.forEach(s => L.marker(s.coords).addTo(mapStations).bindPopup(`<b>${s.title}</b>`));
-
-      // Nutzerposition abrufen
-      if(navigator.geolocation){
-        navigator.geolocation.watchPosition(onPositionUpdate, err => console.warn('Geolocation error', err), { enableHighAccuracy:true });
-      }
-    }
-
-    // Update der Nutzeranzeige (roter Kreis + Pfeil für Blickrichtung)
-    function onPositionUpdate(pos){
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const accuracy = pos.coords.accuracy || 10;
-
-      // clear previous
-      userMarkerLayer.clearLayers();
-
-      // roter Kreis
-      const circle = L.circle([lat,lng], { radius: Math.max(accuracy,5), color:'red', fillColor:'rgba(255,0,0,0.3)', weight:2 }).addTo(userMarkerLayer);
-
-      // direction arrow as SVG marker rotated according to userHeading
-      const svg = `
-        <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-          <g transform="translate(18,18) rotate(${(userHeading || 0)})">
-            <path d="M0,-12 L4,0 L0,-4 L-4,0 Z" fill="red"/>
-            <circle cx="0" cy="0" r="3" fill="red" />
-          </g>
-        </svg>`;
-      const svgURL = "data:image/svg+xml;base64," + btoa(svg);
-      const arrowIcon = L.icon({ iconUrl: svgURL, iconSize: [36,36], iconAnchor: [18,18] });
-      L.marker([lat,lng], { icon: arrowIcon, interactive:false }).addTo(userMarkerLayer);
-
-      // center map if first time
-      if(!mapStations._userCentered){
-        mapStations.setView([lat,lng],16);
-        mapStations._userCentered = true;
-      }
-    }
-
-    // Versuch, Heading aus DeviceOrientation auszulesen
-    function handleDeviceOrientation(e){
-      // e.alpha is compass heading in many devices; conversion may vary by device.
-      let alpha = e.alpha;
-      if(alpha == null) return;
-      // On some browsers alpha is relative; best-effort only
-      userHeading = 360 - alpha; // adjust so arrow points to device heading
-      // update user marker if we have a position (re-render in watchPosition)
-      // no direct update here; next geolocation update will re-draw arrow with new heading
-    }
-
-    // ----------------------------------------
-    // Partikel (Dekoration)
-    // ----------------------------------------
-    function createParticleSystem(){
-      const particleCount = 200;
-      const geometry = new THREE.BufferGeometry();
-      particlePositions = new Float32Array(particleCount*3);
-      for(let i=0;i<particleCount;i++){ particlePositions[i*3]=0; particlePositions[i*3+1]=0; particlePositions[i*3+2]=0; }
-      geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions,3));
-      const material = new THREE.PointsMaterial({ color:0x00aaff, size:0.05, transparent:true, opacity:0.8 });
-      particles = new THREE.Points(geometry, material);
-      scene.add(particles);
-    }
-
-    // ----------------------------------------
-    // Interaktion Canvas Klicks
-    // ----------------------------------------
-    function onCanvasClick(evt){
-      const rect = renderer.domElement.getBoundingClientRect();
-      const x = evt.clientX - rect.left;
-      const y = evt.clientY - rect.top;
-      mouse.x = (x / rect.width) * 2 - 1;
-      mouse.y = -(y / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-
-      if(placedObjects.length > 0){
-        const intersects = raycaster.intersectObjects(placedObjects, true);
-        if(intersects.length > 0){
-          const hit = intersects[0].object;
-          const station = findStationAncestor(hit);
-          if(station){ showInfoBoxForStation(station); return; }
-        }
-      }
-      if(model){
-        const mints = raycaster.intersectObject(model, true);
-        if(mints.length > 0){ showTransientInfo('Modell angetippt'); }
-      }
-    }
-    function findStationAncestor(obj){
-      while(obj){
-        if(placedObjects.includes(obj)) return obj;
-        obj = obj.parent;
-      }
-      return null;
-    }
-    function showInfoBoxForStation(stationMesh){
-      const url = (stationMesh.userData && stationMesh.userData.infoUrl) ? stationMesh.userData.infoUrl : 'https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben';
-      infoBox.textContent = 'Mehr Informationen zu dieser Station';
-      infoBox.style.display = 'block';
-      infoBox.onclick = ()=> window.open(url, '_blank');
-      clearTimeout(infoBox._hideTimer);
-      infoBox._hideTimer = setTimeout(()=>{ infoBox.style.display = 'none'; infoBox.onclick = null; }, 5000);
-    }
-    function showTransientInfo(text){
-      infoBox.textContent = text;
-      infoBox.style.display = 'block';
-      infoBox.onclick = null;
-      clearTimeout(infoBox._hideTimer);
-      infoBox._hideTimer = setTimeout(()=> infoBox.style.display = 'none', 1600);
-    }
-
-    // ----------------------------------------
-    // Vorschau Platzierung (Würfel)
-    // ----------------------------------------
-    function placeInPreview(){
-      const cube = createStationCube();
-      const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-      cube.position.copy(camera.position).add(dir.multiplyScalar(1.5));
-      scene.add(cube);
-      placedObjects.push(cube);
-      addStationToMap(cube);
-      undoBtn.style.display = 'inline-block';
-      showTransientInfo('Station (Vorschau) gesetzt');
-    }
-    function createStationCube(){
-      const geo = new THREE.BoxGeometry(0.2,0.2,0.2);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xff6600 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.userData = { infoUrl: 'https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben', stationId: ++stationCount };
-      return mesh;
-    }
-
-    // ----------------------------------------
-    // AR: Start / Hit-Test / Platzieren
-    // ----------------------------------------
-    async function startAR(){
-      if(!navigator.xr){ alert('WebXR nicht verfügbar'); return; }
       try {
-        xrSession = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['hit-test','local-floor','dom-overlay'],
-          domOverlay: { root: document.body }
+        const map = L.map(mapEl).setView([52.374, 9.716], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // example station markers (replace with your real station data)
+        const stations = [
+          { title: 'Großer Garten', coords: [52.3745, 9.7155] },
+          { title: 'Berggarten', coords: [52.3751, 9.7172] }
+        ];
+
+        stations.forEach(s => {
+          L.marker(s.coords).addTo(map).bindPopup(`<strong>${s.title}</strong>`);
         });
-      } catch(e){
-        console.error('AR Session error', e);
-        alert('AR Session konnte nicht gestartet werden.');
-        return;
-      }
-      renderer.xr.setSession(xrSession);
-      xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
-      const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-      xrSession.addEventListener('end', onSessionEnd);
-      xrSession.addEventListener('select', onXRSelect);
-      renderer.setAnimationLoop(renderAR);
-      undoBtn.style.display = 'inline-block';
-      showTransientInfo('AR gestartet');
-    }
-    function onSessionEnd(){ hitTestSource = null; xrSession = null; renderer.setAnimationLoop(null); reticle.visible = false; showTransientInfo('AR beendet'); }
-    function onXRSelect(){ if(reticle.visible) placeARAtReticle(); }
-    function renderAR(time, xrFrame){
-      if(xrFrame && hitTestSource && xrRefSpace){
-        const hitTestResults = xrFrame.getHitTestResults(hitTestSource);
-        if(hitTestResults.length > 0){
-          const hit = hitTestResults[0];
-          const pose = hit.getPose(xrRefSpace);
-          if(pose){
-            const mat = new THREE.Matrix4().fromArray(pose.transform.matrix);
-            reticle.matrix.copy(mat);
-            reticle.visible = true;
-          }
-        } else { reticle.visible = false; }
-      }
-      renderer.render(scene, camera);
-    }
-    function placeARAtReticle(){
-      const cube = createStationCube();
-      const matrix = new THREE.Matrix4().copy(reticle.matrix);
-      cube.applyMatrix4(matrix);
-      cube.position.setFromMatrixPosition(matrix);
-      scene.add(cube);
-      placedObjects.push(cube);
-      addStationToMap(cube);
-      showTransientInfo('Station in AR platziert');
-    }
 
-    // ----------------------------------------
-    // Karte: Marker hinzufügen (Demo-Positionierung)
-    // ----------------------------------------
-    function addStationToMap(cube){
-      const center = mapStations.getCenter();
-      const offsetLat = 0.00018 * (placedObjects.length % 6);
-      const offsetLng = 0.00012 * Math.floor(placedObjects.length / 6);
-      const pos = [center.lat + offsetLat, center.lng + offsetLng];
-      const marker = L.marker(pos).addTo(mapStations).bindPopup(`<b>Station ${cube.userData.stationId}</b><br><a target="_blank" href="${cube.userData.infoUrl}">Mehr Info</a>`);
-      cube.userData.mapMarker = marker;
-    }
+        // locate button
+        document.getElementById('locateBtn').addEventListener('click', () => {
+          map.locate({ setView: true, maxZoom: 17 });
+        });
 
-    // ----------------------------------------
-    // Undo
-    // ----------------------------------------
-    function undoLastPlaced(){
-      const obj = placedObjects.pop();
-      if(obj){
-        if(obj.userData && obj.userData.mapMarker) mapStations.removeLayer(obj.userData.mapMarker);
-        scene.remove(obj);
+        map.on('locationfound', (e) => {
+          L.circle(e.latlng, { radius: e.accuracy / 2, color: '#0d6efd' }).addTo(map);
+        });
+      } catch (err) {
+        console.warn('Leaflet init failed', err);
       }
-      if(placedObjects.length === 0) undoBtn.style.display = 'none';
-      showTransientInfo('Letzte Station entfernt');
-    }
-
-    // ----------------------------------------
-    // Animation (Preview)
-    // ----------------------------------------
-    function animatePreview(){
-      requestAnimationFrame(animatePreview);
-      if(model) model.rotation.z += 0.005;
-      if(particles){
-        const positions = particles.geometry.attributes.position.array;
-        for(let i=0;i<positions.length;i+=3){
-          positions[i+1] += 0.01;
-          if(positions[i+1] > 2) positions[i+1] = 0;
-        }
-        particles.geometry.attributes.position.needsUpdate = true;
-      }
-      renderer.render(scene, camera);
-    }
-
-    // ----------------------------------------
-    // Utils & Resize
-    // ----------------------------------------
-    function getViewAspect(){ return document.getElementById('viewWindow').clientWidth / document.getElementById('viewWindow').clientHeight; }
-    function setRendererSizeToView(){ renderer.setSize(document.getElementById('viewWindow').clientWidth, document.getElementById('viewWindow').clientHeight); }
-    function onWindowResize(){
-      camera.aspect = getViewAspect();
-      camera.updateProjectionMatrix();
-      setRendererSizeToView();
-      if(mapStations) mapStations.invalidateSize();
-    }
+    })();
   </script>
 </body>
 </html>
