@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>AR Hit Test — Herrenhäuser Gärten</title>
+  <title>AR - Virtueller Rundgang durch die Herrenhäuder Gärten</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <style>
     html,body{height:100%;margin:0;background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial}
@@ -13,25 +13,29 @@
   </style>
 </head>
 <body>
-  <div id="info">Tippe auf den Bildschirm, um ein Objekt zu platzieren. Warte, bis der Ring (Reticle) sichtbar wird.</div>
+  <div id="info">Position wird geprüft. Öffne AR und erlaube Standortzugriff. Ziel: 52.388804, 9.817735</div>
   <div class="overlay"><button id="exitBtn">Beenden</button></div>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
     import { ARButton } from 'https://unpkg.com/three@0.128.0/examples/jsm/webxr/ARButton.js';
 
+    // Zielkoordinate (Latitude, Longitude)
+    const TARGET = { lat: 52.388804, lon: 9.817735 };
+    const SHOW_WITHIN_METERS = 200; // Würfel nur anzeigen, wenn Nutzer näher als dieser Wert (anpassbar)
+    const PLACEMENT_OFFSET_METERS = 0; // zusätzliche Offset-Länge entlang zur Zielrichtung, wenn gewünscht
+
     let camera, scene, renderer;
-    let controller;
-    let reticle;
-    let hitTestSource = null;
-    let hitTestSourceRequested = false;
+    let reticle, hitTestSource = null, hitTestSourceRequested = false;
+    let xrSession = null, xrRefSpace = null;
+    let userPos = null;
+    let placed = false;
+    let rotatingObjects = [];
 
     init();
-    animate();
 
-    function init() {
+    function init(){
       scene = new THREE.Scene();
-
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -40,14 +44,13 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // AR Start Button (Three.js ARButton erzeugt Start-UI)
       document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
-      // Reticle (Ring) für Hit-Test-Markierung
+      // Reticle (Ring)
       const geometry = new THREE.RingGeometry(0.08, 0.12, 32).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0x0077ff });
       reticle = new THREE.Mesh(geometry, material);
@@ -55,22 +58,46 @@
       reticle.visible = false;
       scene.add(reticle);
 
-      // Controller: platziert Objekt beim "select" (Tap)
-      controller = renderer.xr.getController(0);
-      controller.addEventListener('select', onSelect);
+      // Exit button
+      document.getElementById('exitBtn').addEventListener('click', async () => {
+        try { const s = renderer.xr.getSession(); if (s) await s.end(); } catch(e){}
+        try { window.close(); } catch(e){}
+        try { parent.postMessage('exit-ar', window.location.origin); } catch(e){}
+      });
+
+      // Hole initiale GPS-Position (fragt nach Erlaubnis)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((p) => {
+          userPos = { lat: p.coords.latitude, lon: p.coords.longitude };
+          updateInfo();
+        }, (err) => {
+          console.warn('Geolocation error', err);
+          updateInfo('Standortzugriff verweigert oder fehlgeschlagen');
+        }, { enableHighAccuracy: true, maximumAge: 20000, timeout: 10000 });
+      } else {
+        updateInfo('Geolocation nicht verfügbar');
+      }
+
+      // Controller: Tap im AR-Modus platziert falls Reticle sichtbar
+      const controller = renderer.xr.getController(0);
+      controller.addEventListener('select', () => {
+        if (reticle.visible && !placed) {
+          placeCubeAtReticleTarget(reticle.matrix);
+        }
+      });
       scene.add(controller);
 
       window.addEventListener('resize', onWindowResize);
 
-      // Exit-Button: versucht Session zu beenden, schließt Fenster oder informiert Parent
-      document.getElementById('exitBtn').addEventListener('click', async () => {
-        try {
-          const session = renderer.xr.getSession();
-          if (session) await session.end();
-        } catch (e) { /* ignore */ }
-        try { window.close(); } catch(e) {}
-        try { parent.postMessage('exit-ar', window.location.origin); } catch(e) {}
-      });
+      renderer.setAnimationLoop(render);
+    }
+
+    function updateInfo(msg) {
+      const el = document.getElementById('info');
+      if (msg) { el.textContent = msg; return; }
+      if (!userPos) { el.textContent = 'Warte auf Standort...'; return; }
+      const d = distanceMeters(userPos.lat, userPos.lon, TARGET.lat, TARGET.lon);
+      el.textContent = `Deine Distanz zum Ziel: ${Math.round(d)} m. Ziel: ${TARGET.lat}, ${TARGET.lon}.`;
     }
 
     function onWindowResize() {
@@ -79,58 +106,169 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onSelect() {
-      if (!reticle.visible) return;
-
-      const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-      const material = new THREE.MeshPhongMaterial({ color: 0x44ff44 });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.setFromMatrixPosition(reticle.matrix);
-      mesh.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(mesh);
-    }
-
-    function animate() {
-      renderer.setAnimationLoop(render);
-    }
-
     function render(timestamp, frame) {
       if (frame) {
         const session = renderer.xr.getSession();
-        const referenceSpace = renderer.xr.getReferenceSpace ? renderer.xr.getReferenceSpace() : null;
 
-        if (session && !hitTestSourceRequested) {
-          // request hit-test source once per session
+        if (!hitTestSourceRequested && session) {
           session.requestReferenceSpace('viewer').then((viewerSpace) => {
             session.requestHitTestSource({ space: viewerSpace }).then((source) => {
               hitTestSource = source;
             });
-          }).catch(() => { /* viewer ref or hit test not available */ });
-
+          }).catch(()=>{});
           session.addEventListener('end', () => {
             hitTestSourceRequested = false;
             hitTestSource = null;
             reticle.visible = false;
           });
-
           hitTestSourceRequested = true;
         }
 
-        if (hitTestSource && referenceSpace) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-          } else {
-            reticle.visible = false;
+        if (hitTestSource) {
+          const referenceSpace = renderer.xr.getReferenceSpace ? renderer.xr.getReferenceSpace() : null;
+          if (referenceSpace) {
+            const hitTestResults = frame.getHitTestResults(hitTestSource);
+            if (hitTestResults.length > 0) {
+              const hit = hitTestResults[0];
+              const pose = hit.getPose(referenceSpace);
+              if (pose) {
+                reticle.visible = true;
+                reticle.matrix.fromArray(pose.transform.matrix);
+                // Wenn Nutzer nahe genug am Ziel ist und noch nicht platziert: automatische Platzierung
+                if (!placed && userPos) {
+                  const d = distanceMeters(userPos.lat, userPos.lon, TARGET.lat, TARGET.lon);
+                  if (d <= SHOW_WITHIN_METERS) {
+                    // Platziere Würfel in Blickrichtung so, dass er visuell zur Zielrichtung steht
+                    placeCubeRelativeToReticle(pose.transform.matrix, userPos, TARGET, d);
+                    placed = true;
+                  }
+                }
+              } else {
+                reticle.visible = false;
+              }
+            } else {
+              reticle.visible = false;
+            }
           }
         }
       }
 
+      // Drehe alle rotierenden Objekte
+      rotatingObjects.forEach(obj => { obj.rotation.y += 0.02; });
+
       renderer.render(scene, camera);
     }
+
+    // Platzieren: Würfel an Reticle mit zusätzlicher Translation in Richtung Ziel
+    function placeCubeRelativeToReticle(reticleMatrixArray, userPosLocal, targetPos, distanceToTargetMeters) {
+      // Berechne Meter-Vektor von Nutzer zu Ziel (East, North)
+      const enu = latLonToEastNorthMeters(userPosLocal.lat, userPosLocal.lon, targetPos.lat, targetPos.lon);
+      // Normalisiere Richtung
+      const dist = Math.sqrt(enu.e*enu.e + enu.n*enu.n);
+      let dirE = 0, dirN = 0;
+      if (dist > 0.001) { dirE = enu.e / dist; dirN = enu.n / dist; }
+
+      // Wähle wie viele Meter vom Reticle aus in diese Richtung (hier: min(5, distanceToTargetMeters) oder PLACEMENT_OFFSET_METERS)
+      const offsetMeters = Math.min(5, Math.max(1, distanceToTargetMeters * 0.1)) + PLACEMENT_OFFSET_METERS; // adaptiver Offset
+
+      // Transformiere Reticle-Matrix in THREE.Matrix4
+      const mat = new THREE.Matrix4().fromArray(reticleMatrixArray);
+      // Erzeuge kleinen Versatz in Reticle-Lokalraum: entlang Reticle's X/Z
+      // Approx: convert ENU direction to local reticle X/Z by projecting horizontal vector onto camera basis.
+      // Simpler: translate forward by 0 and then rotate cube to face target direction in world-space.
+      const cube = createRotatingCube();
+      // Set cube at reticle position
+      cube.applyMatrix4(mat);
+      // Move cube forward along its local -Z by 0.3m to avoid z-fighting, then shift towards bearing in world space
+      const forward = new THREE.Vector3(0, 0, -0.3).applyMatrix4(new THREE.Matrix4().extractRotation(mat));
+      cube.position.add(forward);
+
+      // Compute world-space offset vector for ENU direction: approximate by rotating horizontal vector relative to camera yaw
+      // Convert ENU (east,north) to a world-space horizontal vector pointing to the target relative to current reticle
+      // We'll construct an offset in world coordinates by mapping ENU->meters in world X/Z using camera orientation
+      const worldOffset = enuToWorldOffset(mat, dirE, dirN, offsetMeters);
+      cube.position.add(worldOffset);
+
+      // Rotate cube to face target: compute bearing and set rotation accordingly
+      const bearing = Math.atan2(enu.e, enu.n); // radians: 0 = north
+      // Rotate cube so its front faces the target (adjust sign)
+      cube.rotation.y = -bearing;
+
+      scene.add(cube);
+      rotatingObjects.push(cube);
+      updateInfo(`Würfel platziert (approx.). Distanz: ${Math.round(distanceToTargetMeters)} m.`);
+    }
+
+    // Bei Tap im AR: wenn reticle sichtbar, platzieren direkt mit gleichen Regeln
+    function placeCubeAtReticle(matrix) {
+      // use existing userPos if available; else just place at reticle
+      if (userPos) {
+        placeCubeRelativeToReticle(matrix.elements ? matrix.elements : matrix, userPos, TARGET, distanceMeters(userPos.lat, userPos.lon, TARGET.lat, TARGET.lon));
+      } else {
+        const cube = createRotatingCube();
+        const mat = new THREE.Matrix4().fromArray(matrix);
+        cube.applyMatrix4(mat);
+        cube.position.add(new THREE.Vector3(0, 0, -0.3).applyMatrix4(new THREE.Matrix4().extractRotation(mat)));
+        scene.add(cube);
+        rotatingObjects.push(cube);
+        updateInfo('Würfel im Reticle platziert (keine GPS-Daten).');
+      }
+    }
+
+    function createRotatingCube() {
+      const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const material = new THREE.MeshStandardMaterial({ color: 0xff5500, metalness: 0.3, roughness: 0.6 });
+      const mesh = new THREE.Mesh(geometry, material);
+      return mesh;
+    }
+
+    // Helper: Abstand in Metern zwischen zwei Lat/Lon (haversine)
+    function distanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = Math.PI/180;
+      const dLat = (lat2-lat1)*toRad;
+      const dLon = (lon2-lon1)*toRad;
+      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)*Math.sin(dLon/2);
+      const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R*c;
+    }
+
+    // Helper: einfache ENU (East, North) in meters from lat/lon differences (approx, small distances)
+    function latLonToEastNorthMeters(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI/180;
+      const dLat = (lat2 - lat1) * toRad;
+      const dLon = (lon2 - lon1) * toRad;
+      const meanLat = (lat1 + lat2)/2 * toRad;
+      const R = 6378137; // equatorial radius
+      const north = dLat * R;
+      const east = dLon * R * Math.cos(meanLat);
+      return { e: east, n: north };
+    }
+
+    // Map ENU direction to a world-space offset vector for placement
+    function enuToWorldOffset(reticleMat, dirE, dirN, meters) {
+      // Build horizontal direction vector in world coordinates using reticle rotation basis:
+      // Use reticle rotation to map a local forward (0,0,-1) and right (1,0,0).
+      const rot = new THREE.Matrix4().extractRotation(new THREE.Matrix4().fromArray(reticleMat));
+      const right = new THREE.Vector3(1,0,0).applyMatrix4(rot).setY(0).normalize(); // local right
+      const forward = new THREE.Vector3(0,0,-1).applyMatrix4(rot).setY(0).normalize(); // local forward (roughly south/north depending on device)
+      // Combine east/north into world horizontal vector: east*right + north*forward
+      const horiz = new THREE.Vector3();
+      horiz.addScaledVector(right, dirE);
+      horiz.addScaledVector(forward, dirN);
+      horiz.setLength(meters);
+      return horiz;
+    }
+
+    // On XR frame start: store user position updates via geolocation watch (best-effort)
+    // keep userPos up-to-date
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition((p) => {
+        userPos = { lat: p.coords.latitude, lon: p.coords.longitude };
+        updateInfo();
+      }, (err) => { console.warn('watchPosition error', err); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
+    }
+
   </script>
 </body>
 </html>
