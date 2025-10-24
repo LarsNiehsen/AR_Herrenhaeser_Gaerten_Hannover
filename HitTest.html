@@ -24,7 +24,7 @@
     const TARGET = { lat: 52.388804, lon: 9.817735 };
 
     let camera, scene, renderer;
-    let reticle, arrow; // Reticle is now the hit-test marker, arrow points to target
+    let reticle, arrow;
     let hitTestSource = null, hitTestSourceRequested = false;
     let userPos = null;
 
@@ -49,7 +49,6 @@
       light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
-      // Reticle (Hit-Test Marker)
       const reticleGeo = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
       const reticleMat = new THREE.MeshBasicMaterial();
       reticle = new THREE.Mesh(reticleGeo, reticleMat);
@@ -57,21 +56,33 @@
       reticle.visible = false;
       scene.add(reticle);
 
-      // Directional Arrow
       arrow = createArrow();
-      arrow.position.set(0, -0.4, -1.2); // Position relative to camera
-      camera.add(arrow); // Attach arrow to camera
-      scene.add(camera); // Add camera (with arrow) to scene
+      arrow.position.set(0, -0.4, -1.2);
+      camera.add(arrow);
+      scene.add(camera);
 
-      // Exit button
+      // Exit button: End session, then try to close window
       document.getElementById('exitBtn').addEventListener('click', async () => {
-        try { const s = renderer.xr.getSession(); if (s) await s.end(); } catch(e){}
+        try {
+          const session = renderer.xr.getSession();
+          if (session) {
+            await session.end();
+          }
+        } catch(e) {
+          console.error("Error ending XR session:", e);
+        }
+        // Attempt to close the browser window. May be blocked by browser.
+        window.close();
       });
 
-      // Get initial GPS position
+      // Get initial GPS position, including altitude
       if (navigator.geolocation) {
         navigator.geolocation.watchPosition((p) => {
-          userPos = { lat: p.coords.latitude, lon: p.coords.longitude };
+          userPos = { 
+            lat: p.coords.latitude, 
+            lon: p.coords.longitude,
+            alt: p.coords.altitude 
+          };
           updateInfoAndArrow();
         }, (err) => {
           console.warn('Geolocation error', err);
@@ -81,7 +92,6 @@
         updateInfo('Geolocation nicht verfügbar.');
       }
 
-      // Controller: Tap places a cube if the reticle is visible
       const controller = renderer.xr.getController(0);
       controller.addEventListener('select', onSelect);
       scene.add(controller);
@@ -100,9 +110,16 @@
         });
         const cube = new THREE.Mesh(geometry, material);
         
-        // Place cube at the reticle's position and orientation
         reticle.matrix.decompose(cube.position, cube.quaternion, cube.scale);
         scene.add(cube);
+        
+        // Add text label with GNSS data if available
+        if (userPos) {
+            const label = createTextLabel(userPos);
+            // Position the label slightly above the cube
+            label.position.copy(cube.position).add(new THREE.Vector3(0, 0.15, 0));
+            scene.add(label);
+        }
       }
     }
 
@@ -114,14 +131,56 @@
 
         const head = new THREE.Mesh(headGeo, material);
         head.position.y = 0.125;
-
         const shaft = new THREE.Mesh(shaftGeo, material);
         shaft.position.y = -0.05;
 
         arrowGroup.add(head);
         arrowGroup.add(shaft);
-        arrowGroup.rotation.x = -Math.PI / 4; // Tilt it forward slightly
+        arrowGroup.rotation.x = -Math.PI / 4;
         return arrowGroup;
+    }
+
+    // Creates a text label as a sprite
+    function createTextLabel(positionData) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const fontSize = 32;
+        const lineHeight = fontSize * 1.2;
+        context.font = `bold ${fontSize}px Inter, sans-serif`;
+
+        const lat = positionData.lat.toFixed(6);
+        const lon = positionData.lon.toFixed(6);
+        const height = positionData.alt ? `${positionData.alt.toFixed(2)}m` : 'N/A';
+
+        const line1 = `Lat: ${lat}, Lon: ${lon}`;
+        const line2 = `Höhe: ${height}`;
+
+        const width1 = context.measureText(line1).width;
+        const width2 = context.measureText(line2).width;
+        const textWidth = Math.max(width1, width2);
+        
+        canvas.width = textWidth + 24;
+        canvas.height = (lineHeight * 2) + 24;
+
+        context.font = `bold ${fontSize}px Inter, sans-serif`;
+        context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = 'white';
+        
+        context.fillText(line1, canvas.width / 2, canvas.height / 2 - lineHeight / 2);
+        context.fillText(line2, canvas.width / 2, canvas.height / 2 + lineHeight / 2);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        
+        const aspect = canvas.width / canvas.height;
+        sprite.scale.set(0.4 * aspect, 0.4, 1);
+        
+        return sprite;
     }
 
     function updateInfo(msg) {
@@ -135,10 +194,8 @@
       updateInfo(`Distanz zum Ziel: ${Math.round(distance)} m`);
 
       const enu = latLonToEastNorthMeters(userPos.lat, userPos.lon, TARGET.lat, TARGET.lon);
-      const bearing = Math.atan2(enu.e, -enu.n); // Bearing in radians from North
+      const bearing = Math.atan2(enu.e, -enu.n);
 
-      // The arrow is a child of the camera. To make it point to a world direction (North),
-      // we must counteract the camera's rotation.
       camera.getWorldQuaternion(arrow.quaternion);
       arrow.quaternion.invert();
       arrow.rotation.y += bearing;
@@ -179,9 +236,7 @@
         }
       }
       
-      // Update arrow rotation continuously
       updateInfoAndArrow();
-      // Make arrow gently float up and down
       if (arrow) {
           arrow.position.y = -0.4 + Math.sin(timestamp / 500) * 0.05;
       }
@@ -189,7 +244,6 @@
       renderer.render(scene, camera);
     }
 
-    // Helper: Distance in meters between two Lat/Lon coordinates (haversine formula)
     function distanceMeters(lat1, lon1, lat2, lon2) {
       const R = 6371000;
       const toRad = Math.PI/180;
@@ -200,13 +254,12 @@
       return R*c;
     }
 
-    // Helper: Convert Lat/Lon differences to East/North meters (approximate, for small distances)
     function latLonToEastNorthMeters(lat1, lon1, lat2, lon2) {
       const toRad = Math.PI/180;
       const dLat = (lat2 - lat1) * toRad;
       const dLon = (lon2 - lon1) * toRad;
       const meanLat = (lat1 + lat2)/2 * toRad;
-      const R = 6378137; // WGS84 equatorial radius
+      const R = 6378137;
       const north = dLat * R;
       const east = dLon * R * Math.cos(meanLat);
       return { e: east, n: north };
