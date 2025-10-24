@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>GartenIS - Virtueller Rundgang Herrenhäuser Gärten</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --gap:16px; --accent:#0b3a66; --btn-blue:#0d6efd; }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial;background:#f4f6f8;color:#222;}
+    header{display:flex;align-items:center;gap:12px;padding:18px;background:linear-gradient(180deg,var(--accent),#0d4771);color:#fff;}
+    header h1{margin:0;font-size:20px;flex:1;text-shadow:0 1px 0 rgba(0,0,0,0.15);}
+    .visit-link{color:#fff;text-decoration:none;background:rgba(255,255,255,0.08);padding:8px 12px;border-radius:8px;font-weight:600;}
+    .visit-link:hover{background:rgba(255,255,255,0.14);}
+    main{max-width:1100px;margin:20px auto;padding:0 16px 40px;display:flex;flex-direction:column;gap:var(--gap);}
+    .card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 8px 24px rgba(16,24,40,0.06);}
+    .intro strong{display:block;margin-bottom:8px;color:var(--accent);font-size:15px;}
+    .intro p{margin:0 0 10px 0;color:#444;line-height:1.45;}
+    .cam-header{display:flex;justify-content:center;align-items:center;gap:12px;}
+    .cam-header h2{margin:0;color:var(--accent);font-size:16px;text-align:center;}
+    #viewWindow{width:100%;height:56vw;max-height:68vh;min-height:300px;background:#000;border-radius:10px;overflow:hidden;position:relative;}
+    @media (max-width:900px){#viewWindow{height:55vh;}}
+    #videoElement{position:absolute;width:100%;height:100%;object-fit:cover;top:0;left:0;z-index:0;background:#000;}
+    #webgl-output{position:absolute;width:100%;height:100%;top:0;left:0;z-index:1;pointer-events:auto;}
+    #infoBox{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.96);color:#111;padding:8px 12px;border-radius:8px;display:none;z-index:6;font-weight:600;font-size:14px;cursor:pointer;}
+    .controls-row{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;}
+    button{cursor:pointer;border:0;padding:8px 12px;border-radius:8px;font-weight:600;}
+    .btn-primary{background:var(--btn-blue);color:#fff;}
+    .btn-secondary{background:#eef2f6;color:var(--accent);}
+    section.stations{margin-top:4px;}
+    section.stations h3{margin:0 0 8px 0;color:var(--accent);}
+    .stations-text{color:#444;margin-top:6px;}
+    #mapStations{width:100%;height:420px;border-radius:8px;overflow:hidden;margin-top:12px;}
+    .map-controls{display:flex;gap:8px;align-items:center;margin-top:8px;}
+    #locateBtn{background:var(--btn-blue);color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:600;}
+    footer{margin-top:18px;text-align:center;color:#666;font-size:13px;}
+    .muted{color:#666;font-size:13px;}
+    /* rotate arrow inside red marker */
+    .user-arrow { transform-origin:center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GartenIS - Virtueller Rundgang Herrenhäuser Gärten</h1>
+    <a class="visit-link" href="https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben" target="_blank">Herrenhäuser Gärten Hannover</a>
+  </header>
+
+  <main>
+    <div class="card intro">
+      <strong>Kurzinfo</strong>
+      <p>
+        Die AR‑Anwendung bietet einen interaktiven, virtuellen Rundgang durch die Herrenhäuser Gärten. Besucherinnen und Besucher können über das Kamerafenster Würfel‑Stationen in ihrer Umgebung platzieren, zu jedem gesetzten Punkt weiterführende Informationen abrufen und so historische Hintergründe, besondere Pflanzen und gestalterische Details der Anlage kompakt erleben.
+      </p>
+      <p>
+        Die Anwendung kombiniert visuelle Modelle, erklärende Texte und Links und ergänzt damit die reale Besichtigung durch zusätzliche Kontextinformationen zu Brunnen, Beeten und Gartenarchitektur.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="cam-header">
+        <h2>Experience Herrenhausen Gardens in Hanover virtually!</h2>
+      </div>
+
+      <div id="viewWindow">
+        <video id="videoElement" autoplay playsinline muted></video>
+        <div id="webgl-output"></div>
+        <div id="infoBox">Mehr Informationen zu dieser Station</div>
+      </div>
+
+      <div class="controls-row" style="margin-top:12px;">
+        <div style="margin-right:auto;color:#666;">Tippe auf "Start AR" für echtes Platzieren; Vorschau erlaubt erstes Testen.</div>
+        <button id="placePreviewBtn" class="btn-secondary">Platzieren (Vorschau)</button>
+        <button id="togglePreviewBtn" class="btn-secondary">Vorschau umschalten</button>
+        <button id="startARBtn" class="btn-primary">Start AR</button>
+        <button id="undoBtn" class="btn-secondary" style="display:none">Undo</button>
+      </div>
+    </div>
+
+    <section class="card stations">
+      <h3>Stationen des virtuellen Rundgangs</h3>
+      <p class="stations-text">
+        Die Karte unten zeigt Ihre aktuelle Position sowie die Stationen des virtuellen Rundgangs zur Orientierung in den Herrenhäuser Gärten. Tippen Sie im Kamerafenster, um in der Vorschau Würfel zu setzen, oder starten Sie AR für Platzierungen in der realen Umgebung.
+      </p>
+
+      <div id="mapStations"></div>
+      <div class="map-controls">
+        <button id="locateBtn">Meine Position</button>
+        <div style="color:#666;font-size:13px;">Erlaube Standortzugriff, damit deine Position und die Stationen korrekt angezeigt werden.</div>
+      </div>
+    </section>
+
+    <footer>© Universität Hannover — GartenIS Demo</footer>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // ----------------------------------------
+    // Globale Variablen
+    // ----------------------------------------
+    let scene, camera, renderer, model, raycaster, mouse, videoEl;
+    let particles, particlePositions = [];
+    let mapStations, userMarkerLayer;
+    let xrSession = null, xrRefSpace = null, hitTestSource = null;
+    let reticle = null, placedObjects = [], stationCount = 0;
+    let userHeading = 0;
+
+    // UI
+    const startARBtn = document.getElementById('startARBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const placePreviewBtn = document.getElementById('placePreviewBtn');
+    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const locateBtn = document.getElementById('locateBtn');
+    const infoBox = document.getElementById('infoBox');
+
+    // ----------------------------------------
+    // Init
+    // ----------------------------------------
+    document.addEventListener('DOMContentLoaded', init);
+
+    function init(){
+      // Three.js Szene & Kamera (Preview)
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, getViewAspect(), 0.01, 1000);
+      camera.position.set(0, 1.6, 2);
+
+      renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      setRendererSizeToView();
+      renderer.xr.enabled = true;
+      document.getElementById('webgl-output').appendChild(renderer.domElement);
+
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      light.position.set(0.5,1,0.25);
+      scene.add(light);
+
+      // Reticle für Hit-Test / Ebenenerkennung (Ring)
+      const ringGeom = new THREE.RingGeometry(0.08, 0.12, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, transparent:true, opacity:0.9 });
+      reticle = new THREE.Mesh(ringGeom, ringMat);
+      reticle.rotation.x = -Math.PI/2;
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      // Kamera-Vorschau starten
+      videoEl = document.getElementById('videoElement');
+      startCameraPreview();
+
+      // Optionales OBJ laden (falls vorhanden)
+      const loader = new THREE.OBJLoader();
+      loader.load('data/Fontaine_3D.obj',
+        function(obj){
+          model = obj;
+          model.scale.set(0.01,0.01,0.01);
+          model.rotation.x = -Math.PI/2;
+          scene.add(model);
+          createParticleSystem();
+        },
+        undefined,
+        function(err){ console.warn('OBJ load error', err); }
+      );
+
+      // Karte initialisieren
+      initMap();
+
+      // Events
+      window.addEventListener('resize', onWindowResize);
+      renderer.domElement.addEventListener('click', onCanvasClick);
+      placePreviewBtn.addEventListener('click', placeInPreview);
+      togglePreviewBtn.addEventListener('click', togglePreview);
+      startARBtn.addEventListener('click', startAR);
+      undoBtn.addEventListener('click', undoLastPlaced);
+      locateBtn.addEventListener('click', centerOnUser);
+
+      // Versuche Heading via DeviceOrientation (falls verfügbar)
+      if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS 13+ - permission required; we don't auto-request here
+      } else {
+        window.addEventListener('deviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', handleDeviceOrientation, true);
+      }
+
+      animatePreview();
+    }
+
+    // ----------------------------------------
+    // Kamera Preview
+    // ----------------------------------------
+    function startCameraPreview(){
+      if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then(s => { videoEl.srcObject = s; })
+          .catch(e => { console.warn('Camera preview error', e); });
+      }
+    }
+    function togglePreview(){ if(videoEl.paused) videoEl.play().catch(()=>{}); else videoEl.pause(); }
+
+    // ----------------------------------------
+    // Karte (eine Karte unter Kamerabild)
+    // - Benutzerposition als roter Kreis + Richtungspfeil
+    // - Marker "Große Fontäne" auf exakter Koordinate
+    // ----------------------------------------
+    function initMap(){
+      mapStations = L.map('mapStations').setView([52.385944,9.695917],15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        attribution:'&copy; OpenStreetMap contributors',
+        maxZoom:19
+      }).addTo(mapStations);
+
+      // Marker: Große Fontäne (ursprüngliche Koordinate)
+      const grosseFontaneCoord = [52.3848, 9.6968];
+      L.marker(grosseFontaneCoord).addTo(mapStations).bindPopup("<b>Große Fontäne</b><br>Herrenhäuser Gärten");
+
+      // Initialer leerer Layer für User (we update it)
+      userMarkerLayer = L.layerGroup().addTo(mapStations);
+
+      // Beispiel-Stationen (weitere können ergänzt werden)
+      const stations = [
+        { title: 'Berggarten', coords: [52.3876, 9.6943] },
+        { title: 'Barockgarten', coords: [52.3851, 9.6972] }
+      ];
+      stations.forEach(s => L.marker(s.coords).addTo(mapStations).bindPopup(`<b>${s.title}</b>`));
+
+      // Nutzerposition abrufen
+      if(navigator.geolocation){
+        navigator.geolocation.watchPosition(onPositionUpdate, err => console.warn('Geolocation error', err), { enableHighAccuracy:true });
+      }
+    }
+
+    // Update der Nutzeranzeige (roter Kreis + Pfeil für Blickrichtung)
+    function onPositionUpdate(pos){
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy || 10;
+
+      // clear previous
+      userMarkerLayer.clearLayers();
+
+      // roter Kreis
+      const circle = L.circle([lat,lng], { radius: Math.max(accuracy,5), color:'red', fillColor:'rgba(255,0,0,0.3)', weight:2 }).addTo(userMarkerLayer);
+
+      // direction arrow as SVG marker rotated according to userHeading
+      const svg = `
+        <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(18,18) rotate(${(userHeading || 0)})">
+            <path d="M0,-12 L4,0 L0,-4 L-4,0 Z" fill="red"/>
+            <circle cx="0" cy="0" r="3" fill="red" />
+          </g>
+        </svg>`;
+      const svgURL = "data:image/svg+xml;base64," + btoa(svg);
+      const arrowIcon = L.icon({ iconUrl: svgURL, iconSize: [36,36], iconAnchor: [18,18] });
+      L.marker([lat,lng], { icon: arrowIcon, interactive:false }).addTo(userMarkerLayer);
+
+      // center map if first time
+      if(!mapStations._userCentered){
+        mapStations.setView([lat,lng],16);
+        mapStations._userCentered = true;
+      }
+    }
+
+    // Versuch, Heading aus DeviceOrientation auszulesen
+    function handleDeviceOrientation(e){
+      // e.alpha is compass heading in many devices; conversion may vary by device.
+      let alpha = e.alpha;
+      if(alpha == null) return;
+      // On some browsers alpha is relative; best-effort only
+      userHeading = 360 - alpha; // adjust so arrow points to device heading
+      // update user marker if we have a position (re-render in watchPosition)
+      // no direct update here; next geolocation update will re-draw arrow with new heading
+    }
+
+    // ----------------------------------------
+    // Partikel (Dekoration)
+    // ----------------------------------------
+    function createParticleSystem(){
+      const particleCount = 200;
+      const geometry = new THREE.BufferGeometry();
+      particlePositions = new Float32Array(particleCount*3);
+      for(let i=0;i<particleCount;i++){ particlePositions[i*3]=0; particlePositions[i*3+1]=0; particlePositions[i*3+2]=0; }
+      geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions,3));
+      const material = new THREE.PointsMaterial({ color:0x00aaff, size:0.05, transparent:true, opacity:0.8 });
+      particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+    }
+
+    // ----------------------------------------
+    // Interaktion Canvas Klicks
+    // ----------------------------------------
+    function onCanvasClick(evt){
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+      mouse.x = (x / rect.width) * 2 - 1;
+      mouse.y = -(y / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      if(placedObjects.length > 0){
+        const intersects = raycaster.intersectObjects(placedObjects, true);
+        if(intersects.length > 0){
+          const hit = intersects[0].object;
+          const station = findStationAncestor(hit);
+          if(station){ showInfoBoxForStation(station); return; }
+        }
+      }
+      if(model){
+        const mints = raycaster.intersectObject(model, true);
+        if(mints.length > 0){ showTransientInfo('Modell angetippt'); }
+      }
+    }
+    function findStationAncestor(obj){
+      while(obj){
+        if(placedObjects.includes(obj)) return obj;
+        obj = obj.parent;
+      }
+      return null;
+    }
+    function showInfoBoxForStation(stationMesh){
+      const url = (stationMesh.userData && stationMesh.userData.infoUrl) ? stationMesh.userData.infoUrl : 'https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben';
+      infoBox.textContent = 'Mehr Informationen zu dieser Station';
+      infoBox.style.display = 'block';
+      infoBox.onclick = ()=> window.open(url, '_blank');
+      clearTimeout(infoBox._hideTimer);
+      infoBox._hideTimer = setTimeout(()=>{ infoBox.style.display = 'none'; infoBox.onclick = null; }, 5000);
+    }
+    function showTransientInfo(text){
+      infoBox.textContent = text;
+      infoBox.style.display = 'block';
+      infoBox.onclick = null;
+      clearTimeout(infoBox._hideTimer);
+      infoBox._hideTimer = setTimeout(()=> infoBox.style.display = 'none', 1600);
+    }
+
+    // ----------------------------------------
+    // Vorschau Platzierung (Würfel)
+    // ----------------------------------------
+    function placeInPreview(){
+      const cube = createStationCube();
+      const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+      cube.position.copy(camera.position).add(dir.multiplyScalar(1.5));
+      scene.add(cube);
+      placedObjects.push(cube);
+      addStationToMap(cube);
+      undoBtn.style.display = 'inline-block';
+      showTransientInfo('Station (Vorschau) gesetzt');
+    }
+    function createStationCube(){
+      const geo = new THREE.BoxGeometry(0.2,0.2,0.2);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xff6600 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData = { infoUrl: 'https://herrenhaeuser-gaerten.hannover.de/Herrenhausen-erleben', stationId: ++stationCount };
+      return mesh;
+    }
+
+    // ----------------------------------------
+    // AR: Start / Hit-Test / Platzieren
+    // ----------------------------------------
+    async function startAR(){
+      if(!navigator.xr){ alert('WebXR nicht verfügbar'); return; }
+      try {
+        xrSession = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test','local-floor','dom-overlay'],
+          domOverlay: { root: document.body }
+        });
+      } catch(e){
+        console.error('AR Session error', e);
+        alert('AR Session konnte nicht gestartet werden.');
+        return;
+      }
+      renderer.xr.setSession(xrSession);
+      xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+      const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+      xrSession.addEventListener('end', onSessionEnd);
+      xrSession.addEventListener('select', onXRSelect);
+      renderer.setAnimationLoop(renderAR);
+      undoBtn.style.display = 'inline-block';
+      showTransientInfo('AR gestartet');
+    }
+    function onSessionEnd(){ hitTestSource = null; xrSession = null; renderer.setAnimationLoop(null); reticle.visible = false; showTransientInfo('AR beendet'); }
+    function onXRSelect(){ if(reticle.visible) placeARAtReticle(); }
+    function renderAR(time, xrFrame){
+      if(xrFrame && hitTestSource && xrRefSpace){
+        const hitTestResults = xrFrame.getHitTestResults(hitTestSource);
+        if(hitTestResults.length > 0){
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(xrRefSpace);
+          if(pose){
+            const mat = new THREE.Matrix4().fromArray(pose.transform.matrix);
+            reticle.matrix.copy(mat);
+            reticle.visible = true;
+          }
+        } else { reticle.visible = false; }
+      }
+      renderer.render(scene, camera);
+    }
+    function placeARAtReticle(){
+      const cube = createStationCube();
+      const matrix = new THREE.Matrix4().copy(reticle.matrix);
+      cube.applyMatrix4(matrix);
+      cube.position.setFromMatrixPosition(matrix);
+      scene.add(cube);
+      placedObjects.push(cube);
+      addStationToMap(cube);
+      showTransientInfo('Station in AR platziert');
+    }
+
+    // ----------------------------------------
+    // Karte: Marker hinzufügen (Demo-Positionierung)
+    // ----------------------------------------
+    function addStationToMap(cube){
+      const center = mapStations.getCenter();
+      const offsetLat = 0.00018 * (placedObjects.length % 6);
+      const offsetLng = 0.00012 * Math.floor(placedObjects.length / 6);
+      const pos = [center.lat + offsetLat, center.lng + offsetLng];
+      const marker = L.marker(pos).addTo(mapStations).bindPopup(`<b>Station ${cube.userData.stationId}</b><br><a target="_blank" href="${cube.userData.infoUrl}">Mehr Info</a>`);
+      cube.userData.mapMarker = marker;
+    }
+
+    // ----------------------------------------
+    // Undo
+    // ----------------------------------------
+    function undoLastPlaced(){
+      const obj = placedObjects.pop();
+      if(obj){
+        if(obj.userData && obj.userData.mapMarker) mapStations.removeLayer(obj.userData.mapMarker);
+        scene.remove(obj);
+      }
+      if(placedObjects.length === 0) undoBtn.style.display = 'none';
+      showTransientInfo('Letzte Station entfernt');
+    }
+
+    // ----------------------------------------
+    // Animation (Preview)
+    // ----------------------------------------
+    function animatePreview(){
+      requestAnimationFrame(animatePreview);
+      if(model) model.rotation.z += 0.005;
+      if(particles){
+        const positions = particles.geometry.attributes.position.array;
+        for(let i=0;i<positions.length;i+=3){
+          positions[i+1] += 0.01;
+          if(positions[i+1] > 2) positions[i+1] = 0;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+      }
+      renderer.render(scene, camera);
+    }
+
+    // ----------------------------------------
+    // Utils & Resize
+    // ----------------------------------------
+    function getViewAspect(){ return document.getElementById('viewWindow').clientWidth / document.getElementById('viewWindow').clientHeight; }
+    function setRendererSizeToView(){ renderer.setSize(document.getElementById('viewWindow').clientWidth, document.getElementById('viewWindow').clientHeight); }
+    function onWindowResize(){
+      camera.aspect = getViewAspect();
+      camera.updateProjectionMatrix();
+      setRendererSizeToView();
+      if(mapStations) mapStations.invalidateSize();
+    }
+  </script>
+</body>
+</html>
